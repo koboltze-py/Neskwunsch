@@ -1,21 +1,87 @@
-# dependencies
-/node_modules
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+instance/
+*.db
+*.sqlite
+*.sqlite3
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dist/
+build/
+.vite/
 /.pnp
 .pnp.js
-
-# testing
 /coverage
 
-# next.js
+# Next.js (falls noch vorhanden)
 /.next/
 /out/
 
-# production
-/build
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# misc
+# Environment Variables
+.env
+.env.local
+.env.production.local
+.env.development.local
+.env.test.local
+
+# Logs
+*.log
+logs/
+
+# OS
 .DS_Store
+Thumbs.db
 *.pem
+
+# Secrets
+*.key
+secrets/
+
+# Temporary files
+*.tmp
+temp/
+tmp/
+
+# Database (wichtig - keine echten Daten hochladen!)
+*.db
+instance/
+
+# VS Code Workspace
+*.code-workspace
 
 # debug
 npm-debug.log*

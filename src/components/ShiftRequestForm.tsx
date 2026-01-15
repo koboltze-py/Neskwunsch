@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ShiftRequest, ShiftType } from '../types/shift';
-import { createShiftRequest, getUserShiftRequests } from '../actions/shift-request';
+import * as api from '../services/api';
 
 interface SubmittedRequest {
   id: string;
@@ -40,13 +40,13 @@ const ShiftRequestForm: React.FC = () => {
   const loadSubmittedRequests = async () => {
     setIsLoadingRequests(true);
     try {
-      const result = await getUserShiftRequests();
+      const result = await api.getUserShiftRequests();
       if (result.success && result.data) {
         // Filtere nur Wünsche des aktuellen Monats
         const currentMonth = new Date().getMonth();
         const currentYear = new Date().getFullYear();
         
-        const currentMonthRequests = (result.data as SubmittedRequest[]).filter(request => {
+        const currentMonthRequests = result.data.filter(request => {
           const requestDate = new Date(request.date);
           return requestDate.getMonth() === currentMonth && 
                  requestDate.getFullYear() === currentYear;
@@ -132,7 +132,7 @@ const ShiftRequestForm: React.FC = () => {
     setShowSuccess(false);
     
     try {
-      const result = await createShiftRequest({
+      const result = await api.createShiftRequest({
         date: formData.date!,
         shiftType: formData.shiftType as ShiftType,
         remarks: formData.remarks || null,
@@ -158,13 +158,10 @@ const ShiftRequestForm: React.FC = () => {
         }, 5000);
       } else {
         // Fehler anzeigen
-        if (result.fieldErrors) {
-          setErrors({
-            date: result.fieldErrors.date?.[0],
-            shiftType: result.fieldErrors.shiftType?.[0],
-          });
+        if (result.error) {
+          alert(result.error);
         } else {
-          alert(result.error || 'Ein Fehler ist aufgetreten');
+          alert('Ein Fehler ist aufgetreten');
         }
       }
     } catch (error) {

@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import os
@@ -7,6 +8,13 @@ import hashlib
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
+
+# CORS-Konfiguration für React Frontend
+CORS(app, 
+     supports_credentials=True,
+     origins=['http://localhost:5173', 'http://127.0.0.1:5173'],
+     allow_headers=['Content-Type'],
+     methods=['GET', 'POST', 'DELETE', 'OPTIONS'])
 
 # Datenbank-Konfiguration
 # Verwende PostgreSQL auf Render, SQLite lokal

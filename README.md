@@ -1,38 +1,37 @@
-# DRK Köln - Dienstwunsch-Anwendung
+ï»¿#  DRK DienstwÃ¼nsche - Schichtplanungs-App
 
-Webbasierte Anwendung für die Verwaltung von Dienstwünschen beim Deutschen Roten Kreuz Köln.
+Eine Webanwendung fÃ¼r das Deutsche Rote Kreuz KÃ¶ln zur Verwaltung von DienstwÃ¼nschen fÃ¼r die Erste-Hilfe-Station am Flughafen.
 
-## Features
+##  Features
 
-- Multi-User-System mit Passwort-Authentifizierung
-- Admin-Dashboard für Übersicht aller Dienstwünsche
-- Benutzer können eigene Dienstwünsche erstellen und verwalten
-- PostgreSQL-Datenbank für dauerhaften Speicher
-- Responsive Design mit Tailwind CSS
+-  **Benutzer-Authentifizierung** - Login/Registrierung mit Session-Management
+-  **Dienstwunsch-System** - Mitarbeiter kÃ¶nnen SchichtwÃ¼nsche (FrÃ¼h/SpÃ¤t/Nacht) abgeben
+-  **Admin-Dashboard** - Ãœbersicht aller WÃ¼nsche fÃ¼r Schichtkoordinatoren
+-  **Responsive Design** - Funktioniert auf Desktop, Tablet und Smartphone
+-  **Datenbankpersistenz** - PostgreSQL (Produktion) / SQLite (Entwicklung)
 
-## Deployment auf Render.com
+##  Schnellstart
 
-1. Repository auf GitHub erstellen und Code hochladen
-2. Auf [render.com](https://render.com) einloggen
-3. ''New''  ''PostgreSQL''  Datenbank erstellen (kostenlos)
-4. ''New''  ''Web Service''  Repository verbinden
-5. Render erkennt automatisch Python und richtet alles ein
-6. Datenbank-URL wird automatisch als DATABASE_URL übergeben
-
-## Lokal starten
-
-\\\ash
+### Backend starten
+```powershell
 pip install -r requirements.txt
 python app.py
-\\\
+```
 
-## Standard-Admin
+### Frontend starten
+```powershell
+npm install
+npm run dev
+```
 
-- Benutzername: **Groß**
-- Passwort: **mettwurst**
+### Login
+- **Name:** GroÃŸ
+- **Passwort:** mettwurst
 
-## Technologie
+##  Dokumentation
 
-- Backend: Flask + SQLAlchemy
-- Datenbank: PostgreSQL (online) / SQLite (lokal)
-- Frontend: HTML + Tailwind CSS + Vanilla JavaScript
+- `SCHNELLSTART.md` - AusfÃ¼hrliche Startanleitung
+- `GITHUB_UPLOAD.md` - GitHub Upload Anleitung
+- `SERVICE_CONNECTIONS.md` - Technische Details
+
+**Version:** 1.0.0 | **Status:**  Produktionsbereit
