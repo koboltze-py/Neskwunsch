@@ -1139,8 +1139,10 @@ def save_shifts_batch():
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# Initialisiere Datenbank beim Import (wichtig f?r Gunicorn/Render)
+init_db()
+
 if __name__ == '__main__':
-    init_db()
     print("\n✅ Dienstwunsch-Anwendung startet...")
     print("🌐 Öffne im Browser: http://localhost:5000")
     print("⛔ Zum Beenden: STRG + C\n")
