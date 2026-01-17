@@ -1192,7 +1192,9 @@ def create_shift_request():
 
         
         # Bei erster Einreichung: Setze Zeitstempel und merke es
-        is_first_submission = (user.first_submission_at is None)
+        # Erste Einreichung = User hat noch KEINE Snapshots (nicht first_submission_at!)
+        existing_user_snapshots = ShiftRequestSnapshot.query.filter_by(user_id=user.id).count()
+        is_first_submission = (existing_user_snapshots == 0)
         if is_first_submission:
             user.first_submission_at = datetime.now()
         
