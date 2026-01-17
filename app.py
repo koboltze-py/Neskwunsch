@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import inspect, text
 from datetime import datetime, timedelta
 import os
 import secrets
@@ -131,19 +132,39 @@ def require_login():
     return None
 
 def init_db():
-    """Initialisiere Datenbank"""
+    """Initialisiere Datenbank mit automatischer Migration"""
     with app.app_context():
+        # WICHTIG: Migration BEVOR db.create_all()
+        inspector = inspect(db.engine)
+        
+        # Pr?fe ob users Tabelle bereits existiert
+        if 'users' in inspector.get_table_names():
+            columns = [col['name'] for col in inspector.get_columns('users')]
+            
+            # Migration: F?ge first_submission_at hinzu falls nicht vorhanden
+            if 'first_submission_at' not in columns:
+                try:
+                    print(" Migration: F?ge Spalte first_submission_at hinzu...")
+                    db.session.execute(db.text("ALTER TABLE users ADD COLUMN first_submission_at TIMESTAMP"))
+                    db.session.commit()
+                    print(" Migration erfolgreich: first_submission_at hinzugef?gt")
+                except Exception as e:
+                    print(f" Migrations-Warnung: {e}")
+                    db.session.rollback()
+        
+        # Erstelle alle Tabellen (nur fehlende werden erstellt)
         db.create_all()
+        
         # Erstelle Initial-Admin falls keine Benutzer existieren
         if User.query.count() == 0:
             admin = User(
-                name='Groß',
+                name='Gro?',
                 password=hash_password('mettwurst'),
                 is_admin=True
             )
             db.session.add(admin)
             db.session.commit()
-            print("✓ Initial-Admin 'Groß' erstellt")
+            print(" Initial-Admin 'Gro?' erstellt")
 
 @app.route('/')
 def index():
