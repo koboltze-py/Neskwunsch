@@ -356,8 +356,8 @@ def admin_dashboard():
                 date=req.date
             ).first()
             if snapshot and snapshot.shift_type != req.shift_type:
-            print(f"[HAS_MOD] User {req.user_id}, Date {req.date}: Snapshot={snapshot.shift_type if snapshot else 'NONE'}, Current={req.shift_type}, Modified={has_modification}")
                 has_modification = True
+                print(f"[HAS_MOD] User {req.user_id}, Date {req.date}: Snapshot={snapshot.shift_type if snapshot else 'NONE'}, Current={req.shift_type}, Modified={has_modification}")
         
         all_requests.append({
             'id': str(req.id),
