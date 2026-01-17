@@ -670,6 +670,52 @@
             }
         }
         
-        </script>
+        
+        async function showUserSnapshots(userId) {
+            try {
+                const response = await fetch(`/api/admin/users/${userId}/snapshots`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const snapshots = data.snapshots || [];
+                    const current = data.current_shifts || [];
+                    
+                    let html = '<div class="space-y-4">';
+                    html += '<h3 class="text-xl font-bold text-gray-900 mb-4">Original vs. Ge?nderte Dienstw?nsche</h3>';
+                    
+                    // Erstelle Vergleichstabelle
+                    const allDates = new Set([...snapshots.map(s => s.date), ...current.map(c => c.date)]);
+                    
+                    html += '<table class="w-full border-collapse">';
+                    html += '<thead><tr class="bg-gray-100">';
+                    html += '<th class="border p-2 text-left">Datum</th>';
+                    html += '<th class="border p-2 text-left">Original</th>';
+                    html += '<th class="border p-2 text-left">Aktuell</th>';
+                    html += '<th class="border p-2 text-center">Status</th>';
+                    html += '</tr></thead><tbody>';
+                    
+                    [...allDates].sort().forEach(date => {
+                        const original = snapshots.find(s => s.date === date);
+                        const changed = current.find(c => c.date === date);
+                        const hasChange = original && changed && original.shift_type !== changed.shift_type;
+                        
+                        html += `<tr class="${hasChange ? 'bg-orange-50' : ''}">`;
+                        html += `<td class="border p-2">${new Date(date + 'T00:00:00').toLocaleDateString('de-DE')}</td>`;
+                        html += `<td class="border p-2">${original ? original.shift_type : '-'}</td>`;
+                        html += `<td class="border p-2">${changed ? changed.shift_type : '-'}</td>`;
+                        html += `<td class="border p-2 text-center">${hasChange ? ' GE?NDERT' : ''}</td>`;
+                        html += '</tr>';
+                    });
+                    
+                    html += '</tbody></table></div>';
+                    
+                    // Zeige in Modal
+                    alert(html.replace(/<[^>]*>/g, '\n')); // Vereinfachte Anzeige
+                }
+            } catch (error) {
+                alert('Fehler beim Laden der ?nderungen: ' + error.message);
+            }
+        }
+</script>
 </body>
 </html>
