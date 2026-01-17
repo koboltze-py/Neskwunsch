@@ -1170,8 +1170,9 @@ def create_shift_request():
         db.session.add(new_request)
 
         
-        # Bei erster Einreichung: Setze Zeitstempel
-        if user.first_submission_at is None:
+        # Bei erster Einreichung: Setze Zeitstempel und merke es
+        is_first_submission = (user.first_submission_at is None)
+        if is_first_submission:
             user.first_submission_at = datetime.now()
         
         # Erstelle Snapshot nur wenn noch keiner f?r dieses Datum existiert
