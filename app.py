@@ -1109,6 +1109,25 @@ def create_shift_request():
         )
         
         db.session.add(new_request)
+        
+        # Bei erster Einreichung: Setze Zeitstempel
+        if user.first_submission_at is None:
+            user.first_submission_at = datetime.now()
+        
+        # Erstelle Snapshot nur wenn noch keiner f?r dieses Datum existiert
+        existing_snapshot = ShiftRequestSnapshot.query.filter_by(
+            user_id=user.id,
+            date=request_date.date()
+        ).first()
+        
+        if not existing_snapshot:
+            # Erstelle Snapshot des urspr?nglichen Diensts
+            snapshot = ShiftRequestSnapshot(
+                user_id=user.id,
+                date=request_date.date(),
+                shift_type=data['shiftType']
+            )
+            db.session.add(snapshot)
         db.session.commit()
         
         return jsonify({
