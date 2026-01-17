@@ -377,8 +377,14 @@ def admin_dashboard():
                 date=req.date
             ).first()
             if snapshot and snapshot.shift_type != req.shift_type:
+                # Aenderung: Shift-Typ unterscheidet sich vom Snapshot
                 has_modification = True
-                print(f"[HAS_MOD] User {req.user_id}, Date {req.date}: Snapshot={snapshot.shift_type if snapshot else 'NONE'}, Current={req.shift_type}, Modified={has_modification}")
+                print(f"[HAS_MOD] User {req.user_id}, Date {req.date}: Snapshot={snapshot.shift_type}, Current={req.shift_type}, Modified=True (geaendert)")
+            elif not snapshot:
+                # Neu hinzugefuegter Dienst nach erster Einreichung (kein Snapshot vorhanden)
+                has_modification = True
+                print(f"[HAS_MOD] User {req.user_id}, Date {req.date}: KEIN SNAPSHOT, Current={req.shift_type}, Modified=True (neu hinzugefuegt)")
+
         
         all_requests.append({
             'id': str(req.id),
