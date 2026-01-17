@@ -1191,13 +1191,16 @@ def create_shift_request():
         db.session.add(new_request)
 
         
-        # Bei erster Einreichung: Setze Zeitstempel und merke es
-        # Erste Einreichung = User hat noch KEINE Snapshots (nicht first_submission_at!)
-        existing_user_snapshots = ShiftRequestSnapshot.query.filter_by(user_id=user.id).count()
-        is_first_submission = (existing_user_snapshots == 0)
-        if is_first_submission:
+        # Bei erster Einreichung: Setze Zeitstempel
+        # Erste Einreichung = first_submission_at wurde gerade eben gesetzt (< 2 Min alt)
+        if user.first_submission_at is None:
             user.first_submission_at = datetime.now()
-        
+            is_first_submission = True
+        else:
+            # Prüfe ob first_submission_at vor weniger als 2 Minuten gesetzt wurde
+            time_since_first = datetime.now() - user.first_submission_at
+            is_first_submission = time_since_first.total_seconds() < 120  # 2 Minuten
+
         # Erstelle Snapshot nur wenn noch keiner f?r dieses Datum existiert
         # Debug: Zeige alle Snapshots für diesen User
         all_user_snapshots = ShiftRequestSnapshot.query.filter_by(user_id=user.id).all()
