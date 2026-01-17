@@ -178,6 +178,27 @@ def init_db():
             print("[INIT] shift_request_snapshots Tabelle existiert bereits")
         tables = inspector.get_table_names()
         print(f"[INIT] Vorhandene Tabellen: {tables}")
+
+        # Cleanup: Lösche falsche Snapshots (die nach der ersten Einreichung erstellt wurden)
+        try:
+            from datetime import timedelta
+            users_with_snapshots = db.session.query(User).join(ShiftRequestSnapshot).distinct().all()
+            for user in users_with_snapshots:
+                if user.first_submission_at:
+                    threshold = user.first_submission_at + timedelta(minutes=5)
+                    false_snapshots = ShiftRequestSnapshot.query.filter(
+                        ShiftRequestSnapshot.user_id == user.id,
+                        ShiftRequestSnapshot.created_at > threshold
+                    ).all()
+                    if false_snapshots:
+                        print(f"[CLEANUP] User {user.id} ({user.name}): Loesche {len(false_snapshots)} falsche Snapshots")
+                        for snap in false_snapshots:
+                            db.session.delete(snap)
+                        db.session.commit()
+            print("[CLEANUP] Snapshot-Cleanup abgeschlossen")
+        except Exception as e:
+            print(f"[CLEANUP ERROR] {e}")
+            db.session.rollback()
         
         # Erstelle Initial-Admin falls keine Benutzer existieren
         if User.query.count() == 0:
