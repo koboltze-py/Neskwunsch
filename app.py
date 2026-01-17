@@ -5,8 +5,6 @@ from datetime import datetime, timedelta
 import os
 import secrets
 import hashlib
-import socket
-from urllib.parse import urlparse, urlunparse
 from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -28,57 +26,11 @@ CORS(app,
 
 # Datenbank-Konfiguration
 # Lokal: SQLite (keine Admin-Rechte nötig) | Production: PostgreSQL
-database_url = os.environ.get('DATABASE_URL', 'sqlite:///dienstwuensche.db')
-
-# Fix für Render: postgres:// -> postgresql+psycopg:// (für psycopg3)
-if database_url.startswith('postgres://'):
-    database_url = database_url.replace('postgres://', 'postgresql+psycopg://', 1)
-elif database_url.startswith('postgresql://'):
-    database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
-
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///dienstwuensche.db')
+# Fix für Render (postgres:// -> postgresql://)
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres://'):
+    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Engine-Optionen für robustere PostgreSQL-Verbindung
-connect_args = {
-    'connect_timeout': 10,
-    'options': '-c statement_timeout=30000'
-}
-
-# IPv6 → IPv4 Fix: hostaddr Parameter für psycopg3
-if database_url.startswith('postgresql+psycopg://'):
-    try:
-        parsed = urlparse(database_url)
-        hostname = parsed.hostname
-        
-        if hostname:
-            print(f"🔍 Hostname erkannt: {hostname}")
-            # Hole alle verfügbaren Adressen (IPv4 und IPv6)
-            addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-            
-            # Suche nach IPv4-Adresse
-            ipv4_addr = None
-            for family, socktype, proto, canonname, sockaddr in addr_info:
-                if family == socket.AF_INET:  # IPv4
-                    ipv4_addr = sockaddr[0]
-                    break
-            
-            if ipv4_addr:
-                connect_args['hostaddr'] = ipv4_addr
-                print(f"✓ PostgreSQL: IPv4-Adresse {ipv4_addr} via hostaddr erzwungen")
-            else:
-                print(f"⚠️ Keine IPv4-Adresse gefunden für {hostname}, verwende Standard-Verbindung")
-        else:
-            print("⚠️ Kein Hostname in DATABASE_URL gefunden")
-    except Exception as e:
-        print(f"⚠️ IPv4-Auflösung fehlgeschlagen: {e}")
-        print(f"   DATABASE_URL: {database_url[:50]}...")
-
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_pre_ping': True,
-    'pool_recycle': 300,
-    'connect_args': connect_args
-}
 
 db = SQLAlchemy(app)
 
@@ -464,22 +416,6 @@ def admin_dashboard():
     
     # Lade Dienstwünsche für ausgewählten Monat
     all_requests = []
-    
-    # Ermittle welche User tatsächlich Änderungen haben
-    users_with_modifications = set()
-    for user in User.query.filter(User.first_submission_at.isnot(None)).all():
-        # Hole Snapshots und aktuelle Shifts
-        snapshots = ShiftRequestSnapshot.query.filter_by(user_id=user.id).all()
-        current_shifts = ShiftRequest.query.filter_by(user_id=user.id).all()
-        
-        # Erstelle Sets für Vergleich
-        snapshot_set = {(s.date.isoformat(), s.shift_type) for s in snapshots}
-        current_set = {(s.date.isoformat(), s.shift_type) for s in current_shifts}
-        
-        # Prüfe ob es Unterschiede gibt
-        if snapshot_set != current_set:
-            users_with_modifications.add(user.id)
-    
     for req in ShiftRequest.query.filter(
         db.extract('month', ShiftRequest.date) == selected_month,
         db.extract('year', ShiftRequest.date) == selected_year
@@ -506,7 +442,6 @@ def admin_dashboard():
             'createdAt': req.created_at.isoformat(),
             'updatedAt': req.updated_at.isoformat() if req.updated_at else req.created_at.isoformat(),
             'first_submission_at': req.user.first_submission_at.isoformat() if req.user.first_submission_at else None,
-            'has_modifications': req.user_id in users_with_modifications,
             'notes': notes_data
         })
     
@@ -1384,24 +1319,6 @@ def delete_shift_request(request_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
-
-# Automatische Datenbank-Initialisierung beim Import (wichtig für Gunicorn/Render)
-try:
-    with app.app_context():
-        db.create_all()
-        migrate_database()
-        # Initial-Admin erstellen falls DB leer
-        if User.query.count() == 0:
-            admin = User(
-                name='Groß',
-                password=hash_password('mettwurst'),
-                is_admin=True
-            )
-            db.session.add(admin)
-            db.session.commit()
-            print("✓ Initial-Admin 'Groß' erstellt")
-except Exception as e:
-    print(f"⚠️ Warnung bei DB-Initialisierung: {e}")
 
 if __name__ == '__main__':
     init_db()
