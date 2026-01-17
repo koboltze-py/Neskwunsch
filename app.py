@@ -153,7 +153,10 @@ def init_db():
                     db.session.rollback()
         
         # Erstelle alle Tabellen (nur fehlende werden erstellt)
+        print("[INIT] Erstelle fehlende Tabellen...")
         db.create_all()
+        tables = inspector.get_table_names()
+        print(f"[INIT] Vorhandene Tabellen: {tables}")
         
         # Erstelle Initial-Admin falls keine Benutzer existieren
         if User.query.count() == 0:
@@ -353,6 +356,7 @@ def admin_dashboard():
                 date=req.date
             ).first()
             if snapshot and snapshot.shift_type != req.shift_type:
+            print(f"[HAS_MOD] User {req.user_id}, Date {req.date}: Snapshot={snapshot.shift_type if snapshot else 'NONE'}, Current={req.shift_type}, Modified={has_modification}")
                 has_modification = True
         
         all_requests.append({
@@ -1128,6 +1132,9 @@ def create_shift_request():
             user.first_submission_at = datetime.now()
         
         # Erstelle Snapshot nur wenn noch keiner f?r dieses Datum existiert
+        # Debug: Zeige alle Snapshots für diesen User
+        all_user_snapshots = ShiftRequestSnapshot.query.filter_by(user_id=user.id).all()
+        print(f"[DEBUG] User {user.id} hat {len(all_user_snapshots)} Snapshots: {[(s.date, s.shift_type) for s in all_user_snapshots]}")
         existing_snapshot = ShiftRequestSnapshot.query.filter_by(
             user_id=user.id,
             date=request_date.date()
