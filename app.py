@@ -155,6 +155,27 @@ def init_db():
         # Erstelle alle Tabellen (nur fehlende werden erstellt)
         print("[INIT] Erstelle fehlende Tabellen...")
         db.create_all()
+
+        # Manuelle Erstellung der shift_request_snapshots Tabelle falls sie fehlt
+        if 'shift_request_snapshots' not in inspector.get_table_names():
+            try:
+                print("[INIT] Erstelle shift_request_snapshots Tabelle manuell...")
+                db.session.execute(db.text('''
+                    CREATE TABLE IF NOT EXISTS shift_request_snapshots (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL REFERENCES users(id),
+                        date DATE NOT NULL,
+                        shift_type VARCHAR(20) NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                '''))
+                db.session.commit()
+                print("[INIT] shift_request_snapshots Tabelle erfolgreich erstellt!")
+            except Exception as e:
+                print(f"[INIT ERROR] Konnte shift_request_snapshots nicht erstellen: {e}")
+                db.session.rollback()
+        else:
+            print("[INIT] shift_request_snapshots Tabelle existiert bereits")
         tables = inspector.get_table_names()
         print(f"[INIT] Vorhandene Tabellen: {tables}")
         
