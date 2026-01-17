@@ -1126,12 +1126,22 @@ def create_shift_request():
         # Wenn ein unbestätigter Wunsch existiert, behalte created_at und shift_type für Snapshot
         original_created_at = None
         original_shift_type = None
+        
+        # Prüfe zuerst ob ein Snapshot existiert (hat das ursprüngliche Datum)
+        existing_snapshot = ShiftRequestSnapshot.query.filter_by(
+            user_id=user.id,
+            date=request_date.date()
+        ).first()
+        
         if existing and not existing.confirmed:
             original_created_at = existing.created_at
             original_shift_type = existing.shift_type
             db.session.delete(existing)
             db.session.flush()  # Flush but don't commit yet
-
+        elif existing_snapshot:
+            # Kein existing Shift, aber Snapshot vorhanden  User hat gelöscht und erstellt neu
+            # Nutze Snapshot's created_at als Original-Datum
+            original_created_at = existing_snapshot.created_at
         # Erstelle neuen Wunsch
         new_request = ShiftRequest(
             user_id=user.id,
@@ -1144,6 +1154,12 @@ def create_shift_request():
         # Bewahre das ursprüngliche created_at Datum wenn es eine Änderung ist
         if original_created_at:
             new_request.created_at = original_created_at
+            # Wenn es eine echte Änderung ist (shift_type unterscheidet sich vom Snapshot), setze updated_at
+            if existing_snapshot and existing_snapshot.shift_type != data['shiftType']:
+                new_request.updated_at = datetime.now()
+            else:
+                # Keine Änderung  updated_at = created_at
+                new_request.updated_at = original_created_at
 
         db.session.add(new_request)
 
@@ -1156,10 +1172,7 @@ def create_shift_request():
         # Debug: Zeige alle Snapshots für diesen User
         all_user_snapshots = ShiftRequestSnapshot.query.filter_by(user_id=user.id).all()
         print(f"[DEBUG] User {user.id} hat {len(all_user_snapshots)} Snapshots: {[(s.date, s.shift_type) for s in all_user_snapshots]}")
-        existing_snapshot = ShiftRequestSnapshot.query.filter_by(
-            user_id=user.id,
-            date=request_date.date()
-        ).first()
+        # existing_snapshot wurde bereits oben abgefragt
         if not existing_snapshot:
             # Erstelle Snapshot des ursprünglichen Diensts
             snapshot = ShiftRequestSnapshot(
