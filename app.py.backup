@@ -44,7 +44,6 @@ class User(db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     force_password_change = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
-    first_submission_at = db.Column(db.DateTime, nullable=True)  # Zeitpunkt des ersten Speicherns
     shift_requests = db.relationship('ShiftRequest', backref='user', lazy=True, cascade='all, delete-orphan')
 
 class ShiftRequest(db.Model):
@@ -66,17 +65,6 @@ class ShiftNote(db.Model):
     shift_request_id = db.Column(db.Integer, db.ForeignKey('shift_requests.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    user = db.relationship('User')
-
-
-class ShiftRequestSnapshot(db.Model):
-    """Speichert ursprüngliche Dienstwünsche beim ersten Speichern"""
-    __tablename__ = 'shift_request_snapshots'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    date = db.Column(db.Date, nullable=False)
-    shift_type = db.Column(db.String(20), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     user = db.relationship('User')
 
@@ -478,41 +466,6 @@ def confirm_all_user_shifts(user_id):
     
     if not is_admin():
         return jsonify({'success': False, 'error': 'Nicht autorisiert'}), 403
-
-@app.route('/api/admin/users/<int:user_id>/snapshots', methods=['GET'])
-def get_user_snapshots(user_id):
-    """Hole ursprÃ¼ngliche DienstwÃ¼nsche eines Benutzers (nur Admin)"""
-    auth_error = require_login()
-    if auth_error:
-        return auth_error
-    
-    if not is_admin():
-        return jsonify({'success': False, 'error': 'Nicht autorisiert'}), 403
-    
-    try:
-        user = User.query.get(user_id)
-        if not user:
-            return jsonify({'success': False, 'error': 'Benutzer nicht gefunden'}), 404
-        
-        snapshots = ShiftRequestSnapshot.query.filter_by(user_id=user_id).order_by(ShiftRequestSnapshot.date).all()
-        current_shifts = ShiftRequest.query.filter_by(user_id=user_id).order_by(ShiftRequest.date).all()
-        
-        return jsonify({
-            'success': True,
-            'user_name': user.name,
-            'first_submission_at': user.first_submission_at.isoformat() if user.first_submission_at else None,
-            'snapshots': [{'date': s.date.isoformat(), 'shift_type': s.shift_type} for s in snapshots],
-            'current': [{
-                'date': s.date.isoformat(), 
-                'shift_type': s.shift_type, 
-                'confirmed': s.confirmed,
-                'created_at': s.created_at.isoformat(),
-                'updated_at': s.updated_at.isoformat() if s.updated_at else s.created_at.isoformat()
-            } for s in current_shifts]
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
     
     try:
         user = User.query.get(user_id)
@@ -1028,9 +981,10 @@ def get_shift_requests():
         return jsonify({'success': True, 'data': filtered})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
-@app.route('/api/shift-requests/batch', methods=['POST'])
-def save_shifts_batch():
-    """Speichere mehrere DienstwÃ¼nsche gleichzeitig mit Ã„nderungsverfolgung"""
+
+@app.route('/api/shift-requests', methods=['POST'])
+def create_shift_request():
+    """Erstelle einen neuen Dienstwunsch"""
     auth_error = require_login()
     if auth_error:
         return auth_error
@@ -1038,71 +992,79 @@ def save_shifts_batch():
     try:
         user = get_current_user()
         data = request.json
-        shifts = data.get('shifts', {})  # Dict: {date: shiftType}
         
-        # PrÃ¼fe ob User bereits einmal gespeichert hat
-        is_first_submission = user.first_submission_at is None
-        has_changes = False
+        # Validierung
+        if not data.get('date'):
+            return jsonify({'success': False, 'error': 'Datum ist erforderlich'}), 400
         
-        if not is_first_submission:
-            # PrÃ¼fe ob es Ã„nderungen gibt (neue Dienste oder geÃ¤nderte Dienste)
-            existing_shifts = {sr.date.isoformat(): sr.shift_type for sr in ShiftRequest.query.filter_by(user_id=user.id).all()}
-            
-            for date_str, shift_type in shifts.items():
-                if date_str not in existing_shifts or existing_shifts[date_str] != shift_type:
-                    has_changes = True
-                    break
-            
-            # PrÃ¼fe auch ob Dienste entfernt wurden
-            for date_str in existing_shifts:
-                if date_str not in shifts and not ShiftRequest.query.filter_by(user_id=user.id, date=datetime.fromisoformat(date_str).date(), confirmed=True).first():
-                    has_changes = True
-                    break
+        if not data.get('shiftType'):
+            return jsonify({'success': False, 'error': 'Schichtart ist erforderlich'}), 400
         
-        # LÃ¶sche alle nicht-bestÃ¤tigten DienstwÃ¼nsche des Users
-        ShiftRequest.query.filter_by(user_id=user.id, confirmed=False).delete()
+        # Prüfe ob Datum in der Vergangenheit liegt
+        request_date = datetime.fromisoformat(data['date'])
+        if request_date.date() < datetime.now().date():
+            return jsonify({
+                'success': False, 
+                'error': 'Das Datum darf nicht in der Vergangenheit liegen'
+            }), 400
         
-        # Erstelle neue DienstwÃ¼nsche
-        new_shifts = []
-        for date_str, shift_type in shifts.items():
-            # Ãœberspringe wenn bereits bestÃ¤tigt
-            if ShiftRequest.query.filter_by(user_id=user.id, date=datetime.fromisoformat(date_str).date(), confirmed=True).first():
-                continue
-            
-            new_shift = ShiftRequest(
-                user_id=user.id,
-                date=datetime.fromisoformat(date_str).date(),
-                shift_type=shift_type,
-                status='PENDING'
-            )
-            db.session.add(new_shift)
-            new_shifts.append(new_shift)
+        # Prüfe ob bereits ein Wunsch für diesen Tag und Benutzer existiert
+        existing = ShiftRequest.query.filter_by(
+            user_id=user.id,
+            date=request_date.date()
+        ).first()
         
-        # Bei erster Einreichung: Setze Zeitstempel und erstelle Snapshots
-        if is_first_submission:
-            user.first_submission_at = datetime.now()
-            
-            # Erstelle Snapshots der ursprÃ¼nglichen Dienste
-            for date_str, shift_type in shifts.items():
-                snapshot = ShiftRequestSnapshot(
-                    user_id=user.id,
-                    date=datetime.fromisoformat(date_str).date(),
-                    shift_type=shift_type
-                )
-                db.session.add(snapshot)
+        if existing:
+            return jsonify({
+                'success': False,
+                'error': 'Sie haben bereits einen Wunsch für dieses Datum eingereicht'
+            }), 400
         
+        # Erstelle neuen Wunsch
+        new_request = ShiftRequest(
+            user_id=user.id,
+            date=request_date.date(),
+            shift_type=data['shiftType'],
+            remarks=data.get('remarks', ''),
+            status='PENDING'
+        )
+        
+        db.session.add(new_request)
         db.session.commit()
         
         return jsonify({
-            'success': True,
-            'is_modification': not is_first_submission and has_changes,
-            'shift_count': len(new_shifts)
+            'success': True, 
+            'data': {
+                'id': str(new_request.id),
+                'user_name': user.name,
+                'date': new_request.date.isoformat(),
+                'shiftType': new_request.shift_type,
+                'remarks': new_request.remarks,
+                'status': new_request.status,
+                'confirmed': new_request.confirmed,
+                'createdAt': new_request.created_at.isoformat()
+            }
         })
     
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/shift-requests/<request_id>', methods=['DELETE'])
+def delete_shift_request(request_id):
+    """Lösche einen Dienstwunsch"""
+    auth_error = require_login()
+    if auth_error:
+        return auth_error
+    
+    try:
+        user = get_current_user()
+        
+        # Finde den Wunsch
+        shift_request = ShiftRequest.query.get(int(request_id))
+        
+        if not shift_request:
+            return jsonify({'success': False, 'error': 'Wunsch nicht gefunden'}), 404
         
         # Prüfe ob der Wunsch dem aktuellen Benutzer gehört
         if shift_request.user_id != user.id:
