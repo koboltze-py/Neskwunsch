@@ -1098,13 +1098,15 @@ def create_shift_request():
                 'success': False,
                 'error': 'Sie haben bereits einen bestätigten Wunsch für dieses Datum. Bitte kontaktieren Sie Herrn Peters für Änderungen.'
             }), 400
-        
-        # Wenn ein unbestätigter Wunsch existiert, lösche ihn zuerst (Update-Logik)
+        # Wenn ein unbestätigter Wunsch existiert, behalte created_at und shift_type für Snapshot
+        original_created_at = None
+        original_shift_type = None
         if existing and not existing.confirmed:
+            original_created_at = existing.created_at
+            original_shift_type = existing.shift_type
             db.session.delete(existing)
             db.session.flush()  # Flush but don't commit yet
 
-        
         # Erstelle neuen Wunsch
         new_request = ShiftRequest(
             user_id=user.id,
@@ -1114,7 +1116,12 @@ def create_shift_request():
             status='PENDING'
         )
         
+        # Bewahre das ursprüngliche created_at Datum wenn es eine Änderung ist
+        if original_created_at:
+            new_request.created_at = original_created_at
+
         db.session.add(new_request)
+
         
         # Bei erster Einreichung: Setze Zeitstempel
         if user.first_submission_at is None:
@@ -1125,15 +1132,17 @@ def create_shift_request():
             user_id=user.id,
             date=request_date.date()
         ).first()
-        
         if not existing_snapshot:
-            # Erstelle Snapshot des urspr?nglichen Diensts
+            # Erstelle Snapshot des ursprünglichen Diensts
             snapshot = ShiftRequestSnapshot(
                 user_id=user.id,
                 date=request_date.date(),
                 shift_type=data['shiftType']
             )
             db.session.add(snapshot)
+            print(f"[SNAPSHOT CREATED] User {user.id}, Date {request_date.date()}, Type {data['shiftType']}")
+        else:
+            print(f"[SNAPSHOT EXISTS] User {user.id}, Date {request_date.date()}, Snapshot Type: {existing_snapshot.shift_type}, Current Type: {data['shiftType']}")
         db.session.commit()
         
         return jsonify({
