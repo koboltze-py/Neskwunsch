@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 import os
 import secrets
 import hashlib
+import socket
+from urllib.parse import urlparse, urlunparse
 from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -26,13 +28,36 @@ CORS(app,
 
 # Datenbank-Konfiguration
 # Lokal: SQLite (keine Admin-Rechte nötig) | Production: PostgreSQL
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///dienstwuensche.db')
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///dienstwuensche.db')
+
 # Fix für Render: postgres:// -> postgresql+psycopg:// (für psycopg3)
-if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres://'):
-    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres://', 'postgresql+psycopg://', 1)
-elif app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql://'):
-    # Explizit psycopg3 Driver verwenden
-    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('postgresql://', 'postgresql+psycopg://', 1)
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql+psycopg://', 1)
+elif database_url.startswith('postgresql://'):
+    database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
+
+# IPv6 → IPv4 Fix: Hostname zu IPv4-Adresse auflösen
+if database_url.startswith('postgresql+psycopg://'):
+    try:
+        parsed = urlparse(database_url)
+        if parsed.hostname:
+            # Versuche IPv4-Adresse zu bekommen
+            ipv4_addr = socket.getaddrinfo(parsed.hostname, None, socket.AF_INET)[0][4][0]
+            # Ersetze Hostname durch IPv4-Adresse in der URL
+            netloc = parsed.netloc.replace(parsed.hostname, ipv4_addr)
+            database_url = urlunparse((
+                parsed.scheme,
+                netloc,
+                parsed.path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment
+            ))
+            print(f"✓ PostgreSQL: IPv4-Adresse {ipv4_addr} verwendet")
+    except Exception as e:
+        print(f"⚠️ Konnte Hostname nicht zu IPv4 auflösen: {e}")
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Engine-Optionen für robustere PostgreSQL-Verbindung
