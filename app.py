@@ -1350,6 +1350,24 @@ def delete_shift_request(request_id):
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# Automatische Datenbank-Initialisierung beim Import (wichtig für Gunicorn/Render)
+try:
+    with app.app_context():
+        db.create_all()
+        migrate_database()
+        # Initial-Admin erstellen falls DB leer
+        if User.query.count() == 0:
+            admin = User(
+                name='Groß',
+                password=hash_password('mettwurst'),
+                is_admin=True
+            )
+            db.session.add(admin)
+            db.session.commit()
+            print("✓ Initial-Admin 'Groß' erstellt")
+except Exception as e:
+    print(f"⚠️ Warnung bei DB-Initialisierung: {e}")
+
 if __name__ == '__main__':
     init_db()
     print("\n✅ Dienstwunsch-Anwendung startet...")
