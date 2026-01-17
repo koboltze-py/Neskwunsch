@@ -277,7 +277,7 @@
                 const userData = userShifts[userId];
                 const shifts = userData.shifts.sort((a, b) => new Date(a.date) - new Date(b.date));
                 const unconfirmedCount = shifts.filter(s => !s.confirmed).length;
-                const hasModifications = shifts.length > 0 && shifts[0].has_modifications === true;
+                const hasModifications = shifts.some(s => s.has_modification === true);
                 
                 return `
                     <div class="border border-gray-200 rounded-lg overflow-hidden">
