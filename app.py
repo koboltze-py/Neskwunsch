@@ -1049,6 +1049,76 @@ def get_shift_requests():
         return jsonify({'success': True, 'data': filtered})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/shift-requests', methods=['POST'])
+def create_shift_request():
+    """Erstelle einen neuen Dienstwunsch"""
+    auth_error = require_login()
+    if auth_error:
+        return auth_error
+    
+    try:
+        user = get_current_user()
+        data = request.json
+        
+        # Validierung
+        if not data.get('date'):
+            return jsonify({'success': False, 'error': 'Datum ist erforderlich'}), 400
+        
+        if not data.get('shiftType'):
+            return jsonify({'success': False, 'error': 'Schichtart ist erforderlich'}), 400
+        
+        # PrÃ¼fe ob Datum in der Vergangenheit liegt
+        request_date = datetime.fromisoformat(data['date'])
+        if request_date.date() < datetime.now().date():
+            return jsonify({
+                'success': False, 
+                'error': 'Das Datum darf nicht in der Vergangenheit liegen'
+            }), 400
+        
+        # PrÃ¼fe ob bereits ein Wunsch fÃ¼r diesen Tag und Benutzer existiert
+        existing = ShiftRequest.query.filter_by(
+            user_id=user.id,
+            date=request_date.date()
+        ).first()
+        
+        if existing:
+            return jsonify({
+                'success': False,
+                'error': 'Sie haben bereits einen Wunsch fÃ¼r dieses Datum eingereicht'
+            }), 400
+        
+        # Erstelle neuen Wunsch
+        new_request = ShiftRequest(
+            user_id=user.id,
+            date=request_date.date(),
+            shift_type=data['shiftType'],
+            remarks=data.get('remarks', ''),
+            status='PENDING'
+        )
+        
+        db.session.add(new_request)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True, 
+            'data': {
+                'id': str(new_request.id),
+                'user_name': user.name,
+                'date': new_request.date.isoformat(),
+                'shiftType': new_request.shift_type,
+                'remarks': new_request.remarks,
+                'status': new_request.status,
+                'confirmed': new_request.confirmed,
+                'createdAt': new_request.created_at.isoformat()
+            }
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/shift-requests/batch', methods=['POST'])
 def save_shifts_batch():
     """Speichere mehrere DienstwÃ¼nsche gleichzeitig mit Ã„nderungsverfolgung"""
