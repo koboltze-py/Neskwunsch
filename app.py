@@ -25,7 +25,7 @@ CORS(app,
      methods=['GET', 'POST', 'DELETE', 'OPTIONS'])
 
 # Datenbank-Konfiguration
-# Lokal: SQLite (keine Admin-Rechte nötig) | Production: PostgreSQL
+# Verwende PostgreSQL auf Render, SQLite lokal
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///dienstwuensche.db')
 # Fix für Render (postgres:// -> postgresql://)
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres://'):
@@ -45,7 +45,6 @@ class User(db.Model):
     force_password_change = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     shift_requests = db.relationship('ShiftRequest', backref='user', lazy=True, cascade='all, delete-orphan')
-    first_submission_at = db.Column(db.DateTime, nullable=True)  # Zeitpunkt des ersten Speicherns
 
 class ShiftRequest(db.Model):
     __tablename__ = 'shift_requests'
@@ -66,16 +65,6 @@ class ShiftNote(db.Model):
     shift_request_id = db.Column(db.Integer, db.ForeignKey('shift_requests.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    user = db.relationship('User')
-
-class ShiftRequestSnapshot(db.Model):
-    """Speichert ursprüngliche Dienstwünsche beim ersten Speichern"""
-    __tablename__ = 'shift_request_snapshots'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    date = db.Column(db.Date, nullable=False)
-    shift_type = db.Column(db.String(20), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     user = db.relationship('User')
 
@@ -129,115 +118,10 @@ def require_login():
         return jsonify({'success': False, 'error': 'Nicht angemeldet'}), 401
     return None
 
-def migrate_database():
-    """Führt Datenbank-Migration durch"""
-    from sqlalchemy import text, inspect
-    
-    def check_column_exists(table_name, column_name):
-        inspector = inspect(db.engine)
-        columns = [col['name'] for col in inspector.get_columns(table_name)]
-        return column_name in columns
-    
-    def check_table_exists(table_name):
-        inspector = inspect(db.engine)
-        return table_name in inspector.get_table_names()
-    
-    # Erkenne Datenbanktyp
-    is_postgres = 'postgresql' in str(db.engine.url)
-    
-    try:
-        # Prüfe ob updated_at Spalte existiert
-        if check_table_exists('shift_requests') and not check_column_exists('shift_requests', 'updated_at'):
-            print("   Füge updated_at Spalte zu shift_requests hinzu...")
-            with db.engine.connect() as conn:
-                conn.execute(text("""
-                    ALTER TABLE shift_requests 
-                    ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                """))
-                conn.commit()
-            print("   ✓ updated_at Spalte hinzugefügt")
-        
-        # Prüfe ob shift_notes Tabelle existiert
-        if not check_table_exists('shift_notes'):
-            print("   Erstelle shift_notes Tabelle...")
-            with db.engine.connect() as conn:
-                if is_postgres:
-                    # PostgreSQL Syntax
-                    conn.execute(text("""
-                        CREATE TABLE shift_notes (
-                            id SERIAL PRIMARY KEY,
-                            shift_request_id INTEGER NOT NULL,
-                            user_id INTEGER NOT NULL,
-                            content TEXT NOT NULL,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            FOREIGN KEY (shift_request_id) REFERENCES shift_requests(id) ON DELETE CASCADE,
-                            FOREIGN KEY (user_id) REFERENCES users(id)
-                        )
-                    """))
-                else:
-                    # SQLite Syntax
-                    conn.execute(text("""
-                        CREATE TABLE shift_notes (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            shift_request_id INTEGER NOT NULL,
-                            user_id INTEGER NOT NULL,
-                            content TEXT NOT NULL,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            FOREIGN KEY (shift_request_id) REFERENCES shift_requests(id) ON DELETE CASCADE,
-                            FOREIGN KEY (user_id) REFERENCES users(id)
-                        )
-                    """))
-                conn.commit()
-            print("   ✓ shift_notes Tabelle erstellt")
-        
-        # Prüfe ob first_submission_at Spalte in users existiert
-        if check_table_exists('users') and not check_column_exists('users', 'first_submission_at'):
-            print("   Füge first_submission_at Spalte zu users hinzu...")
-            with db.engine.connect() as conn:
-                conn.execute(text("""
-                    ALTER TABLE users 
-                    ADD COLUMN first_submission_at TIMESTAMP
-                """))
-                conn.commit()
-            print("   ✓ first_submission_at Spalte hinzugefügt")
-        
-        # Prüfe ob shift_request_snapshots Tabelle existiert
-        if not check_table_exists('shift_request_snapshots'):
-            print("   Erstelle shift_request_snapshots Tabelle...")
-            with db.engine.connect() as conn:
-                if is_postgres:
-                    conn.execute(text("""
-                        CREATE TABLE shift_request_snapshots (
-                            id SERIAL PRIMARY KEY,
-                            user_id INTEGER NOT NULL,
-                            date DATE NOT NULL,
-                            shift_type VARCHAR(20) NOT NULL,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                        )
-                    """))
-                else:
-                    conn.execute(text("""
-                        CREATE TABLE shift_request_snapshots (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            user_id INTEGER NOT NULL,
-                            date DATE NOT NULL,
-                            shift_type VARCHAR(20) NOT NULL,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                        )
-                    """))
-                conn.commit()
-            print("   ✓ shift_request_snapshots Tabelle erstellt")
-    except Exception as e:
-        print(f"   Warnung bei Migration: {e}")
-
 def init_db():
     """Initialisiere Datenbank"""
     with app.app_context():
         db.create_all()
-        # Führe Migration durch
-        migrate_database()
         # Erstelle Initial-Admin falls keine Benutzer existieren
         if User.query.count() == 0:
             admin = User(
@@ -404,14 +288,12 @@ def admin_dashboard():
     all_users = User.query.order_by(User.name).all()
     users_data = []
     for u in all_users:
-        # Zähle shift_requests ohne sie komplett zu laden
-        shift_count = ShiftRequest.query.filter_by(user_id=u.id).count()
         users_data.append({
             'id': u.id,
             'name': u.name,
             'is_admin': u.is_admin,
             'created_at': u.created_at.isoformat(),
-            'shift_count': shift_count
+            'shift_count': len(u.shift_requests)
         })
     
     # Lade Dienstwünsche für ausgewählten Monat
@@ -441,7 +323,6 @@ def admin_dashboard():
             'confirmed': req.confirmed,
             'createdAt': req.created_at.isoformat(),
             'updatedAt': req.updated_at.isoformat() if req.updated_at else req.created_at.isoformat(),
-            'first_submission_at': req.user.first_submission_at.isoformat() if req.user.first_submission_at else None,
             'notes': notes_data
         })
     
@@ -1086,16 +967,6 @@ def get_shift_requests():
         
         filtered = []
         for req in requests:
-            # Lade Notizen für diesen Dienst
-            notes_data = []
-            for note in req.shift_notes:
-                notes_data.append({
-                    'id': note.id,
-                    'content': note.content,
-                    'user_name': note.user.name,
-                    'created_at': note.created_at.isoformat()
-                })
-            
             filtered.append({
                 'id': str(req.id),
                 'user_name': user.name,
@@ -1104,9 +975,7 @@ def get_shift_requests():
                 'remarks': req.remarks,
                 'status': req.status,
                 'confirmed': req.confirmed,
-                'createdAt': req.created_at.isoformat(),
-                'updatedAt': req.updated_at.isoformat() if req.updated_at else req.created_at.isoformat(),
-                'notes': notes_data
+                'createdAt': req.created_at.isoformat()
             })
         
         return jsonify({'success': True, 'data': filtered})
@@ -1175,115 +1044,6 @@ def create_shift_request():
                 'confirmed': new_request.confirmed,
                 'createdAt': new_request.created_at.isoformat()
             }
-        })
-    
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/admin/users/<int:user_id>/snapshots', methods=['GET'])
-def get_user_snapshots(user_id):
-    """Hole ursprüngliche Dienstwünsche eines Benutzers (nur Admin)"""
-    auth_error = require_login()
-    if auth_error:
-        return auth_error
-    
-    if not is_admin():
-        return jsonify({'success': False, 'error': 'Nicht autorisiert'}), 403
-    
-    try:
-        user = User.query.get(user_id)
-        if not user:
-            return jsonify({'success': False, 'error': 'Benutzer nicht gefunden'}), 404
-        
-        snapshots = ShiftRequestSnapshot.query.filter_by(user_id=user_id).order_by(ShiftRequestSnapshot.date).all()
-        current_shifts = ShiftRequest.query.filter_by(user_id=user_id).order_by(ShiftRequest.date).all()
-        
-        return jsonify({
-            'success': True,
-            'user_name': user.name,
-            'first_submission_at': user.first_submission_at.isoformat() if user.first_submission_at else None,
-            'snapshots': [{'date': s.date.isoformat(), 'shift_type': s.shift_type} for s in snapshots],
-            'current': [{
-                'date': s.date.isoformat(), 
-                'shift_type': s.shift_type, 
-                'confirmed': s.confirmed,
-                'created_at': s.created_at.isoformat(),
-                'updated_at': s.updated_at.isoformat() if s.updated_at else s.created_at.isoformat()
-            } for s in current_shifts]
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/shift-requests/batch', methods=['POST'])
-def save_shifts_batch():
-    """Speichere mehrere Dienstwünsche gleichzeitig mit Änderungsverfolgung"""
-    auth_error = require_login()
-    if auth_error:
-        return auth_error
-    
-    try:
-        user = get_current_user()
-        data = request.json
-        shifts = data.get('shifts', {})  # Dict: {date: shiftType}
-        
-        # Prüfe ob User bereits einmal gespeichert hat
-        is_first_submission = user.first_submission_at is None
-        has_changes = False
-        
-        if not is_first_submission:
-            # Prüfe ob es Änderungen gibt (neue Dienste oder geänderte Dienste)
-            existing_shifts = {sr.date.isoformat(): sr.shift_type for sr in ShiftRequest.query.filter_by(user_id=user.id).all()}
-            
-            for date_str, shift_type in shifts.items():
-                if date_str not in existing_shifts or existing_shifts[date_str] != shift_type:
-                    has_changes = True
-                    break
-            
-            # Prüfe auch ob Dienste entfernt wurden
-            for date_str in existing_shifts:
-                if date_str not in shifts and not ShiftRequest.query.filter_by(user_id=user.id, date=datetime.fromisoformat(date_str).date(), confirmed=True).first():
-                    has_changes = True
-                    break
-        
-        # Lösche alle nicht-bestätigten Dienstwünsche des Users
-        ShiftRequest.query.filter_by(user_id=user.id, confirmed=False).delete()
-        
-        # Erstelle neue Dienstwünsche
-        new_shifts = []
-        for date_str, shift_type in shifts.items():
-            # Überspringe wenn bereits bestätigt
-            if ShiftRequest.query.filter_by(user_id=user.id, date=datetime.fromisoformat(date_str).date(), confirmed=True).first():
-                continue
-            
-            new_shift = ShiftRequest(
-                user_id=user.id,
-                date=datetime.fromisoformat(date_str).date(),
-                shift_type=shift_type,
-                status='PENDING'
-            )
-            db.session.add(new_shift)
-            new_shifts.append(new_shift)
-        
-        # Bei erster Einreichung: Setze Zeitstempel und erstelle Snapshots
-        if is_first_submission:
-            user.first_submission_at = datetime.now()
-            
-            # Erstelle Snapshots der ursprünglichen Dienste
-            for date_str, shift_type in shifts.items():
-                snapshot = ShiftRequestSnapshot(
-                    user_id=user.id,
-                    date=datetime.fromisoformat(date_str).date(),
-                    shift_type=shift_type
-                )
-                db.session.add(snapshot)
-        
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'is_modification': not is_first_submission and has_changes,
-            'shift_count': len(new_shifts)
         })
     
     except Exception as e:

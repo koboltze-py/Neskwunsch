@@ -7,25 +7,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .calendar-day {
-            min-height: 100px;
+            min-height: 80px;
             cursor: pointer;
             transition: all 0.2s;
-            -webkit-tap-highlight-color: transparent;
-        }
-        @media (max-width: 768px) {
-            .calendar-day {
-                min-height: 80px;
-                font-size: 0.875rem;
-            }
         }
         .calendar-day:hover {
             transform: scale(1.05);
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-        @media (hover: none) {
-            .calendar-day:hover {
-                transform: none;
-            }
         }
         .calendar-day.selected-T {
             background-color: #FEF3C7 !important;
@@ -52,20 +40,20 @@
     <div class="min-h-screen py-8 px-4">
         <div class="max-w-6xl mx-auto">
             <!-- Header -->
-            <div class="bg-white rounded-2xl shadow-xl p-4 md:p-6 mb-6">
-                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div class="bg-white rounded-2xl shadow-xl p-6 mb-6">
+                <div class="flex justify-between items-center">
                     <div class="flex items-center space-x-3">
-                        <div class="w-12 h-12 bg-red-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <div class="w-12 h-12 bg-red-600 rounded-lg flex items-center justify-center">
                             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                         </div>
                         <div>
-                            <h1 class="text-xl md:text-2xl font-bold text-gray-900">Dienstwünsche - Folgemonat</h1>
-                            <p class="text-xs md:text-sm text-gray-600">Angemeldet als: <span class="font-semibold text-red-600">{{ user_name }}</span></p>
+                            <h1 class="text-2xl font-bold text-gray-900">Dienstwünsche - Folgemonat</h1>
+                            <p class="text-sm text-gray-600">Angemeldet als: <span class="font-semibold text-red-600">{{ user_name }}</span></p>
                         </div>
                     </div>
-                    <a href="/logout" class="inline-flex items-center px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors min-h-[44px]">
+                    <a href="/logout" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors">
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                         </svg>
@@ -75,20 +63,20 @@
             </div>
 
             <!-- Legende -->
-            <div class="bg-white rounded-2xl shadow-xl p-4 md:p-6 mb-6">
-                <h2 class="text-base md:text-lg font-bold text-gray-900 mb-4">Legende</h2>
-                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 md:p-4 mb-4">
-                    <p class="text-xs md:text-sm text-blue-800">
+            <div class="bg-white rounded-2xl shadow-xl p-6 mb-6">
+                <h2 class="text-lg font-bold text-gray-900 mb-4">Legende</h2>
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <p class="text-sm text-blue-800">
                         <strong>💡 Tipp:</strong> Klicken Sie mehrfach auf einen Tag, um durch die Schichttypen zu rotieren:
-                        <span class="font-mono text-xs md:text-sm">T → T10 → N → N10 → (leer) → T → ...</span>
+                        <span class="font-mono">T → T10 → N → N10 → (leer) → T → ...</span>
                     </p>
                 </div>
-                <div class="bg-yellow-50 border border-yellow-300 rounded-lg p-3 md:p-4 mb-4">
-                    <p class="text-xs md:text-sm text-yellow-800">
+                <div class="bg-yellow-50 border border-yellow-300 rounded-lg p-4 mb-4">
+                    <p class="text-sm text-yellow-800">
                         <strong>📝 Hinweis zu Notizen:</strong> Notizen können erst nach dem Speichern eines Dienstwunsches erstellt werden. Wählen Sie zuerst einen Dienst aus, klicken Sie auf "Änderungen speichern" und anschließend erscheint der "💬 Notiz" Button.
                     </p>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div class="flex items-center space-x-2">
                         <div class="w-8 h-8 bg-amber-100 border-2 border-amber-500 rounded"></div>
                         <span class="text-sm font-medium">T - Tagdienst</span>
@@ -109,57 +97,57 @@
             </div>
 
             <!-- Kalender -->
-            <div class="bg-white rounded-2xl shadow-xl p-4 md:p-6 mb-6">
-                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                    <h2 class="text-lg md:text-xl font-bold text-gray-900" id="monthTitle"></h2>
-                    <div class="flex space-x-2 w-full sm:w-auto">
-                        <button type="button" id="saveButton" class="flex-1 sm:flex-none px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold min-h-[44px] text-sm md:text-base">
+            <div class="bg-white rounded-2xl shadow-xl p-6 mb-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-gray-900" id="monthTitle"></h2>
+                    <div class="flex space-x-2">
+                        <button type="button" id="saveButton" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold">
                             Änderungen speichern
                         </button>
                     </div>
                 </div>
                 
                 <!-- Wochentage -->
-                <div class="grid grid-cols-7 gap-1 md:gap-2 mb-2">
-                    <div class="text-center font-bold text-gray-700 py-2 text-xs md:text-sm">Mo</div>
-                    <div class="text-center font-bold text-gray-700 py-2 text-xs md:text-sm">Di</div>
-                    <div class="text-center font-bold text-gray-700 py-2 text-xs md:text-sm">Mi</div>
-                    <div class="text-center font-bold text-gray-700 py-2 text-xs md:text-sm">Do</div>
-                    <div class="text-center font-bold text-gray-700 py-2 text-xs md:text-sm">Fr</div>
-                    <div class="text-center font-bold text-gray-700 py-2 text-xs md:text-sm">Sa</div>
-                    <div class="text-center font-bold text-gray-700 py-2 text-xs md:text-sm">So</div>
+                <div class="grid grid-cols-7 gap-2 mb-2">
+                    <div class="text-center font-bold text-gray-700 py-2">Mo</div>
+                    <div class="text-center font-bold text-gray-700 py-2">Di</div>
+                    <div class="text-center font-bold text-gray-700 py-2">Mi</div>
+                    <div class="text-center font-bold text-gray-700 py-2">Do</div>
+                    <div class="text-center font-bold text-gray-700 py-2">Fr</div>
+                    <div class="text-center font-bold text-gray-700 py-2">Sa</div>
+                    <div class="text-center font-bold text-gray-700 py-2">So</div>
                 </div>
 
                 <!-- Kalendertage -->
-                <div class="grid grid-cols-7 gap-1 md:gap-2" id="calendarGrid">
+                <div class="grid grid-cols-7 gap-2" id="calendarGrid">
                     <!-- Wird durch JavaScript befüllt -->
                 </div>
             </div>
 
             <!-- Nachrichtenfunktion -->
-            <div class="bg-white rounded-2xl shadow-xl p-4 md:p-8">
-                <h2 class="text-lg md:text-xl font-bold text-gray-900 mb-4 md:mb-6">Nachricht an Admin senden</h2>
+            <div class="bg-white rounded-2xl shadow-xl p-8">
+                <h2 class="text-xl font-bold text-gray-900 mb-6">Nachricht an Admin senden</h2>
                 <form id="messageForm" class="space-y-4">
                     <div>
                         <label for="messageContent" class="block text-sm font-semibold text-gray-700 mb-2">Ihre Nachricht</label>
-                        <textarea id="messageContent" name="content" rows="4" required placeholder="Schreiben Sie Ihre Nachricht an die Administratoren..." class="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 focus:outline-none transition-colors text-gray-900 text-sm md:text-base"></textarea>
+                        <textarea id="messageContent" name="content" rows="4" required placeholder="Schreiben Sie Ihre Nachricht an die Administratoren..." class="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 focus:outline-none transition-colors text-gray-900"></textarea>
                     </div>
                     <div id="messageSuccess" class="hidden bg-green-50 border border-green-200 rounded-lg p-4">
                         <p class="text-sm text-green-800">✓ Nachricht erfolgreich gesendet!</p>
                     </div>
-                    <button type="submit" id="messageButton" class="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-semibold py-3.5 px-6 rounded-lg transition-all min-h-[44px] text-sm md:text-base">Nachricht senden</button>
+                    <button type="submit" id="messageButton" class="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-semibold py-3.5 px-6 rounded-lg transition-all">Nachricht senden</button>
                 </form>
             </div>
         </div>
     </div>
 
     <!-- Modal für Notizen zu Diensten -->
-    <div id="noteModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-2xl p-4 md:p-6 max-w-md w-full">
-            <h3 class="text-lg md:text-xl font-bold text-gray-900 mb-4">Notiz zum Dienst hinzufügen</h3>
-            <p class="text-xs md:text-sm text-gray-600 mb-4" id="noteDate"></p>
+    <div id="noteModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-2xl p-6 max-w-md w-full mx-4">
+            <h3 class="text-xl font-bold text-gray-900 mb-4">Notiz zum Dienst hinzufügen</h3>
+            <p class="text-sm text-gray-600 mb-4" id="noteDate"></p>
             <form id="noteForm">
-                <textarea id="noteContent" rows="4" required placeholder="Ihre Notiz (z.B. 'Kann nur bis 14 Uhr', 'Tausch mit Kollege möglich')" class="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 focus:outline-none transition-colors text-gray-900 mb-4 text-sm md:text-base"></textarea>
+                <textarea id="noteContent" rows="4" required placeholder="Ihre Notiz (z.B. 'Kann nur bis 14 Uhr', 'Tausch mit Kollege möglich')" class="w-full px-4 py-3 rounded-lg border-2 border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 focus:outline-none transition-colors text-gray-900 mb-4"></textarea>
                 <div class="flex space-x-3">
                     <button type="button" onclick="closeNoteModal()" class="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300">
                         Abbrechen
@@ -221,8 +209,8 @@
 
             // Kalendertage
             for (let day = 1; day <= lastDay.getDate(); day++) {
-                // Erzeuge dateStr direkt ohne Zeitzonenproblem
-                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const date = new Date(year, month, day);
+                const dateStr = date.toISOString().split('T')[0];
                 
                 const dayDiv = document.createElement('div');
                 dayDiv.className = 'calendar-day border-2 border-gray-300 rounded-lg p-2 bg-white flex flex-col justify-between';
@@ -282,19 +270,13 @@
                 dayDiv.classList.add('confirmed');
             }
             
-            // Extrahiere Tag aus dateStr (yyyy-mm-dd) ohne Zeitzonenproblem
-            const day = parseInt(dateStr.split('-')[2]);
+            const day = new Date(dateStr).getDate();
             dayDiv.innerHTML = `
                 <div class="text-right font-bold text-gray-700">${day}</div>
                 <div class="text-center text-sm font-semibold mt-2">
                     ${newShift || ''}
                     ${existingShifts[dateStr]?.confirmed ? '<div class="text-xs text-green-600">✓</div>' : ''}
                 </div>
-                ${newShift ? `
-                    <button type="button" onclick="event.stopPropagation(); openNoteModal('${dateStr}')" class="w-full mt-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 rounded" title="Notiz hinzufügen">
-                        💬 Notiz
-                    </button>
-                ` : ''}
             `;
         }
 
@@ -304,31 +286,33 @@
             button.textContent = 'Wird gespeichert...';
             
             try {
-                // Sende alle ausgewählten Dienste an die Batch-API
-                const response = await fetch('/api/shift-requests/batch', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        shifts: selectedShifts  // {date: shiftType}
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    // Zeige Warnung bei nachträglichen Änderungen
-                    if (result.is_modification) {
-                        alert('⚠️ WICHTIG: Änderungen nach der ersten Einreichung!\n\n' +
-                              'Sie haben Ihre Dienstwünsche nachträglich geändert.\n\n' +
-                              'Bitte senden Sie eine E-Mail an Herr Peters, um ihn über die Änderungen zu informieren.\n\n' +
-                              'Änderungen werden eventuell nicht berücksichtigt, wenn sie zu spät erfolgen.');
-                    } else {
-                        alert('Dienstwünsche erfolgreich gespeichert!');
+                // Lösche alle bisherigen (nicht bestätigten) Einträge
+                for (const dateStr in existingShifts) {
+                    if (!existingShifts[dateStr].confirmed) {
+                        await fetch(`/api/shift-requests/${existingShifts[dateStr].id}`, {
+                            method: 'DELETE'
+                        });
                     }
-                    window.location.reload();
-                } else {
-                    alert('Fehler beim Speichern: ' + (result.error || 'Unbekannter Fehler'));
                 }
+                
+                // Erstelle neue Einträge
+                for (const dateStr in selectedShifts) {
+                    // Nur speichern wenn noch nicht bestätigt oder neu
+                    if (!existingShifts[dateStr] || !existingShifts[dateStr].confirmed) {
+                        await fetch('/api/shift-requests', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                date: dateStr,
+                                shiftType: selectedShifts[dateStr],
+                                remarks: ''
+                            })
+                        });
+                    }
+                }
+                
+                alert('Dienstwünsche erfolgreich gespeichert!');
+                window.location.reload();
             } catch (error) {
                 alert('Fehler beim Speichern');
                 console.error(error);
@@ -372,9 +356,7 @@
 
         function openNoteModal(dateStr) {
             currentNoteDate = dateStr;
-            // Zeitzonenunabhängiges Parsen: yyyy-mm-dd -> Jahr, Monat-1, Tag
-            const [year, month, day] = dateStr.split('-').map(Number);
-            const date = new Date(year, month - 1, day);
+            const date = new Date(dateStr);
             const formattedDate = date.toLocaleDateString('de-DE', { 
                 weekday: 'long', 
                 year: 'numeric', 
