@@ -242,7 +242,23 @@
             }
         }
 
-        function selectShift(dateStr, dayDiv) {
+        async function selectShift(dateStr, dayDiv) {
+            // Pr?fe ob User bereits Dienstw?nsche gespeichert hat
+            const hasExisting = Object.keys(existingShifts).length > 0;
+            const isModification = hasExisting && existingShifts[dateStr];
+            
+            if (isModification) {
+                const confirmChange = confirm(
+                    ' WICHTIG: Sie ?ndern einen bereits gespeicherten Dienstwunsch!\n\n' +
+                    '?nderungen k?nnen eventuell NICHT mehr ber?cksichtigt werden.\n\n' +
+                    'Bitte senden Sie zus?tzlich eine E-Mail an:\n' +
+                    'Herrn Peters (peters@drk-koeln.de)\n\n' +
+                    'mit Ihrer ?nderung und dem Grund.\n\n' +
+                    'M?chten Sie trotzdem fortfahren?'
+                );
+                if (!confirmChange) return;
+            }
+            
             const currentShift = selectedShifts[dateStr];
             let newShift;
             
@@ -270,7 +286,7 @@
                 dayDiv.classList.add('confirmed');
             }
             
-            const day = new Date(dateStr).getDate();
+            const day = parseInt(dateStr.split('-')[2], 10);
             dayDiv.innerHTML = `
                 <div class="text-right font-bold text-gray-700">${day}</div>
                 <div class="text-center text-sm font-semibold mt-2">

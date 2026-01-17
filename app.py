@@ -345,6 +345,16 @@ def admin_dashboard():
                 'created_at': note.created_at.isoformat()
             })
         
+        # Pr?fe ob User ?nderungen vorgenommen hat
+        has_modification = False
+        if req.user.first_submission_at:
+            snapshot = ShiftRequestSnapshot.query.filter_by(
+                user_id=req.user_id,
+                date=req.date
+            ).first()
+            if snapshot and snapshot.shift_type != req.shift_type:
+                has_modification = True
+        
         all_requests.append({
             'id': str(req.id),
             'user_id': req.user_id,
@@ -356,7 +366,8 @@ def admin_dashboard():
             'confirmed': req.confirmed,
             'createdAt': req.created_at.isoformat(),
             'updatedAt': req.updated_at.isoformat() if req.updated_at else req.created_at.isoformat(),
-            'notes': notes_data
+            'notes': notes_data,
+            'has_modification': has_modification
         })
     
     # Generiere Liste verfügbarer Monate (letzte 12 Monate + nächste 3)

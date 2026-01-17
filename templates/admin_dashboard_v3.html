@@ -4,7 +4,58 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - Dienstwünsche</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com">
+        
+        async function showSnapshots(userId) {
+            try {
+                const response = await fetch(`/api/admin/users/${userId}/snapshots`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    let message = ' ORIGINAL-DIENSTW?NSCHE vs AKTUELLE:\n\n';
+                    message += '\n\n';
+                    
+                    // Vergleiche Snapshots mit aktuellen Shifts
+                    const snapshotMap = {};
+                    data.snapshots.forEach(s => {
+                        snapshotMap[s.date] = s.shift_type;
+                    });
+                    
+                    const currentMap = {};
+                    data.current_shifts.forEach(s => {
+                        currentMap[s.date] = s.shift_type;
+                    });
+                    
+                    // Zeige alle Daten
+                    const allDates = [...new Set([...Object.keys(snapshotMap), ...Object.keys(currentMap)])].sort();
+                    
+                    let hasChanges = false;
+                    allDates.forEach(date => {
+                        const original = snapshotMap[date] || '-';
+                        const current = currentMap[date] || '-';
+                        
+                        if (original !== current) {
+                            hasChanges = true;
+                            const dateObj = new Date(date + 'T00:00:00');
+                            const formatted = dateObj.toLocaleDateString('de-DE');
+                            message += ` ${formatted}:\n`;
+                            message += `   Original: ${original}\n`;
+                            message += `   Aktuell:  ${current} ${original !== current ? '' : ''}\n\n`;
+                        }
+                    });
+                    
+                    if (!hasChanges) {
+                        message += 'Keine ?nderungen gefunden.';
+                    }
+                    
+                    alert(message);
+                }
+            } catch (error) {
+                alert('Fehler beim Laden der ?nderungen: ' + error.message);
+            }
+        }
+        
+        </script>
     <style>
         .shift-tag-T {
             background-color: #FEF3C7;
@@ -228,6 +279,8 @@
                 const userData = userShifts[userId];
                 const shifts = userData.shifts.sort((a, b) => new Date(a.date) - new Date(b.date));
                 const unconfirmedCount = shifts.filter(s => !s.confirmed).length;
+                const hasModifications = shifts.some(s => s.has_modification);
+                userData.has_modifications = hasModifications;
                 
                 return `
                     <div class="border border-gray-200 rounded-lg overflow-hidden">
@@ -566,6 +619,57 @@
         // Init
         renderShiftsByUser();
         renderUsers();
-    </script>
+    
+        
+        async function showSnapshots(userId) {
+            try {
+                const response = await fetch(`/api/admin/users/${userId}/snapshots`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    let message = ' ORIGINAL-DIENSTW?NSCHE vs AKTUELLE:\n\n';
+                    message += '\n\n';
+                    
+                    // Vergleiche Snapshots mit aktuellen Shifts
+                    const snapshotMap = {};
+                    data.snapshots.forEach(s => {
+                        snapshotMap[s.date] = s.shift_type;
+                    });
+                    
+                    const currentMap = {};
+                    data.current_shifts.forEach(s => {
+                        currentMap[s.date] = s.shift_type;
+                    });
+                    
+                    // Zeige alle Daten
+                    const allDates = [...new Set([...Object.keys(snapshotMap), ...Object.keys(currentMap)])].sort();
+                    
+                    let hasChanges = false;
+                    allDates.forEach(date => {
+                        const original = snapshotMap[date] || '-';
+                        const current = currentMap[date] || '-';
+                        
+                        if (original !== current) {
+                            hasChanges = true;
+                            const dateObj = new Date(date + 'T00:00:00');
+                            const formatted = dateObj.toLocaleDateString('de-DE');
+                            message += ` ${formatted}:\n`;
+                            message += `   Original: ${original}\n`;
+                            message += `   Aktuell:  ${current} ${original !== current ? '' : ''}\n\n`;
+                        }
+                    });
+                    
+                    if (!hasChanges) {
+                        message += 'Keine ?nderungen gefunden.';
+                    }
+                    
+                    alert(message);
+                }
+            } catch (error) {
+                alert('Fehler beim Laden der ?nderungen: ' + error.message);
+            }
+        }
+        
+        </script>
 </body>
 </html>
