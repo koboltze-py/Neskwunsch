@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import secrets
 import hashlib
@@ -56,6 +56,17 @@ class ShiftRequest(db.Model):
     status = db.Column(db.String(20), default='PENDING')
     confirmed = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    shift_notes = db.relationship('ShiftNote', backref='shift_request', lazy=True, cascade='all, delete-orphan')
+
+class ShiftNote(db.Model):
+    __tablename__ = 'shift_notes'
+    id = db.Column(db.Integer, primary_key=True)
+    shift_request_id = db.Column(db.Integer, db.ForeignKey('shift_requests.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    user = db.relationship('User')
 
 class Message(db.Model):
     __tablename__ = 'messages'
@@ -131,7 +142,7 @@ def index():
     # Admins zur Admin-Seite umleiten
     if user.is_admin:
         return redirect(url_for('admin_dashboard'))
-    return render_template('shift_request_form.html', user_name=user.name)
+    return render_template('shift_request_form_new.html', user_name=user.name)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -256,6 +267,23 @@ def admin_dashboard():
     if not user.is_admin:
         return redirect(url_for('index'))
     
+    # Monat-Filter aus Query-Parameter
+    selected_month = request.args.get('month')
+    selected_year = request.args.get('year')
+    
+    # Standard: Folgemonat
+    if not selected_month or not selected_year:
+        today = datetime.now()
+        if today.month == 12:
+            selected_month = 1
+            selected_year = today.year + 1
+        else:
+            selected_month = today.month + 1
+            selected_year = today.year
+    else:
+        selected_month = int(selected_month)
+        selected_year = int(selected_year)
+    
     # Lade alle Benutzer
     all_users = User.query.order_by(User.name).all()
     users_data = []
@@ -268,9 +296,22 @@ def admin_dashboard():
             'shift_count': len(u.shift_requests)
         })
     
-    # Lade alle Dienstwünsche mit Benutzernamen
+    # Lade Dienstwünsche für ausgewählten Monat
     all_requests = []
-    for req in ShiftRequest.query.order_by(ShiftRequest.date).all():
+    for req in ShiftRequest.query.filter(
+        db.extract('month', ShiftRequest.date) == selected_month,
+        db.extract('year', ShiftRequest.date) == selected_year
+    ).order_by(ShiftRequest.date).all():
+        # Lade Notizen für diesen Dienst
+        notes_data = []
+        for note in req.shift_notes:
+            notes_data.append({
+                'id': note.id,
+                'content': note.content,
+                'user_name': note.user.name,
+                'created_at': note.created_at.isoformat()
+            })
+        
         all_requests.append({
             'id': str(req.id),
             'user_id': req.user_id,
@@ -280,13 +321,32 @@ def admin_dashboard():
             'remarks': req.remarks,
             'status': req.status,
             'confirmed': req.confirmed,
-            'createdAt': req.created_at.isoformat()
+            'createdAt': req.created_at.isoformat(),
+            'updatedAt': req.updated_at.isoformat() if req.updated_at else req.created_at.isoformat(),
+            'notes': notes_data
         })
     
-    return render_template('admin_dashboard.html', 
+    # Generiere Liste verfügbarer Monate (letzte 12 Monate + nächste 3)
+    import calendar as cal
+    available_months = []
+    today = datetime.now()
+    for i in range(-12, 4):
+        month_date = datetime(today.year, today.month, 1) + timedelta(days=32 * i)
+        month_date = month_date.replace(day=1)
+        available_months.append({
+            'year': month_date.year,
+            'month': month_date.month,
+            'name': cal.month_name[month_date.month],
+            'display': f"{cal.month_name[month_date.month]} {month_date.year}"
+        })
+    
+    return render_template('admin_dashboard_v3.html', 
                          requests=all_requests,
                          users=users_data,
-                         user_name=user.name)
+                         user_name=user.name,
+                         selected_month=selected_month,
+                         selected_year=selected_year,
+                         available_months=available_months)
 
 # Admin API Endpoints
 @app.route('/api/admin/users', methods=['GET'])
@@ -395,6 +455,96 @@ def confirm_shift_request(request_id):
         return jsonify({'success': True, 'confirmed': shift_request.confirmed})
     except Exception as e:
         db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/admin/users/<int:user_id>/confirm-all-shifts', methods=['POST'])
+def confirm_all_user_shifts(user_id):
+    """Alle Dienstwünsche eines Benutzers bestätigen (nur Admin)"""
+    auth_error = require_login()
+    if auth_error:
+        return auth_error
+    
+    if not is_admin():
+        return jsonify({'success': False, 'error': 'Nicht autorisiert'}), 403
+    
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'success': False, 'error': 'Benutzer nicht gefunden'}), 404
+        
+        # Hole alle unbestätigten Dienstwünsche des Benutzers
+        shifts = ShiftRequest.query.filter_by(user_id=user_id, confirmed=False).all()
+        
+        for shift in shifts:
+            shift.confirmed = True
+        
+        db.session.commit()
+        
+        return jsonify({'success': True, 'confirmed_count': len(shifts)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/shift-notes', methods=['POST'])
+def create_shift_note():
+    """Erstelle Notiz zu einem Dienst"""
+    auth_error = require_login()
+    if auth_error:
+        return auth_error
+    
+    try:
+        user = get_current_user()
+        data = request.json
+        
+        shift_id = data.get('shift_id')
+        content = data.get('content', '').strip()
+        
+        if not shift_id or not content:
+            return jsonify({'success': False, 'error': 'Dienst-ID und Inhalt erforderlich'}), 400
+        
+        # Prüfe ob Dienst existiert
+        shift_request = ShiftRequest.query.get(shift_id)
+        if not shift_request:
+            return jsonify({'success': False, 'error': 'Dienst nicht gefunden'}), 404
+        
+        note = ShiftNote(shift_request_id=shift_id, user_id=user.id, content=content)
+        db.session.add(note)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'note': {
+                'id': note.id,
+                'content': note.content,
+                'user_name': user.name,
+                'created_at': note.created_at.isoformat()
+            }
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/shift-notes/<int:shift_id>', methods=['GET'])
+def get_shift_notes(shift_id):
+    """Hole alle Notizen zu einem Dienst"""
+    auth_error = require_login()
+    if auth_error:
+        return auth_error
+    
+    try:
+        notes = ShiftNote.query.filter_by(shift_request_id=shift_id).order_by(ShiftNote.created_at).all()
+        
+        notes_data = []
+        for note in notes:
+            notes_data.append({
+                'id': note.id,
+                'content': note.content,
+                'user_name': note.user.name,
+                'created_at': note.created_at.isoformat()
+            })
+        
+        return jsonify({'success': True, 'notes': notes_data})
+    except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/messages', methods=['GET', 'POST'])
@@ -600,7 +750,7 @@ def export_excel():
 
 @app.route('/api/admin/export/pdf')
 def export_pdf():
-    """Exportiere Dienstwünsche als PDF-Datei"""
+    """Exportiere Dienstwünsche als PDF-Datei mit Kalender-Layout"""
     auth_error = require_login()
     if auth_error:
         return auth_error
@@ -609,91 +759,210 @@ def export_pdf():
         return jsonify({'success': False, 'error': 'Nicht autorisiert'}), 403
     
     try:
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=1*cm, leftMargin=1*cm,
-                              topMargin=1*cm, bottomMargin=1*cm)
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib import colors
+        import calendar
         
-        elements = []
-        styles = getSampleStyleSheet()
+        buffer = BytesIO()
+        
+        # Berechne Folgemonat
+        today = datetime.now()
+        if today.month == 12:
+            next_month = 1
+            next_year = today.year + 1
+        else:
+            next_month = today.month + 1
+            next_year = today.year
+        
+        # Hole alle Dienstwünsche für Folgemonat
+        all_shifts = ShiftRequest.query.filter(
+            db.extract('month', ShiftRequest.date) == next_month,
+            db.extract('year', ShiftRequest.date) == next_year
+        ).all()
+        
+        # Gruppiere nach Benutzer und Datum
+        user_shifts = {}
+        for shift in all_shifts:
+            if shift.user.name not in user_shifts:
+                user_shifts[shift.user.name] = {}
+            day = shift.date.day
+            user_shifts[shift.user.name][day] = {
+                'type': shift.shift_type,
+                'confirmed': shift.confirmed
+            }
+        
+        # Sortiere Benutzer
+        sorted_users = sorted(user_shifts.keys())
+        
+        # Erstelle PDF
+        c = canvas.Canvas(buffer, pagesize=landscape(A4))
+        width, height = landscape(A4)
         
         # Titel
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=16,
-            textColor=colors.HexColor('#C00000'),
-            spaceAfter=30,
-            alignment=1  # Center
-        )
-        title = Paragraph(f"Dienstwünsche - Übersicht vom {datetime.now().strftime('%d.%m.%Y')}", title_style)
-        elements.append(title)
+        month_name = calendar.month_name[next_month]
+        c.setFont("Helvetica-Bold", 16)
+        c.setFillColorRGB(0.75, 0, 0)  # DRK Rot
+        c.drawCentredString(width/2, height - 40, f"Dienstplan {month_name} {next_year}")
         
-        # Tabelle
-        data = [['Mitarbeiter', 'Datum', 'Wochentag', 'Schicht', 'Bemerkungen', 'Status']]
+        # Untertitel
+        c.setFont("Helvetica", 10)
+        c.setFillColorRGB(0, 0, 0)
+        c.drawCentredString(width/2, height - 60, f"Erstellt am {today.strftime('%d.%m.%Y %H:%M')}")
         
-        all_requests = ShiftRequest.query.order_by(ShiftRequest.user_id, ShiftRequest.date).all()
+        # Kalender-Tabelle
+        days_in_month = calendar.monthrange(next_year, next_month)[1]
         
-        for req in all_requests:
-            data.append([
-                req.user.name,
-                req.date.strftime('%d.%m.%Y'),
-                req.date.strftime('%A'),
-                req.shift_type,
-                req.remarks[:30] + '...' if req.remarks and len(req.remarks) > 30 else (req.remarks or ''),
-                '✓ Bestätigt' if req.confirmed else 'Offen'
-            ])
+        # Spaltenbreiten
+        name_col_width = 100
+        day_col_width = (width - 80 - name_col_width) / days_in_month
         
-        table = Table(data, colWidths=[3.5*cm, 2.5*cm, 3*cm, 2*cm, 6*cm, 2.5*cm])
+        # Startposition
+        x_start = 40
+        y_start = height - 100
+        row_height = 25
         
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#C00000')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F0F0F0')])
-        ]))
+        # Header mit Tagesnummern
+        c.setFont("Helvetica-Bold", 8)
+        for day in range(1, days_in_month + 1):
+            x = x_start + name_col_width + (day - 1) * day_col_width
+            c.drawCentredString(x + day_col_width/2, y_start, str(day))
         
-        elements.append(table)
+        # Wochentage unter den Tagesnummern
+        c.setFont("Helvetica", 6)
+        for day in range(1, days_in_month + 1):
+            date_obj = datetime(next_year, next_month, day)
+            weekday = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'][date_obj.weekday()]
+            x = x_start + name_col_width + (day - 1) * day_col_width
+            c.drawCentredString(x + day_col_width/2, y_start - 10, weekday)
+        
+        # Mitarbeiter-Zeilen
+        y_pos = y_start - 30
+        c.setFont("Helvetica", 9)
+        
+        for user_name in sorted_users:
+            # Name
+            c.drawString(x_start, y_pos, user_name)
+            
+            # Schichten für jeden Tag
+            for day in range(1, days_in_month + 1):
+                x = x_start + name_col_width + (day - 1) * day_col_width
+                
+                if day in user_shifts[user_name]:
+                    shift_info = user_shifts[user_name][day]
+                    shift_type = shift_info['type']
+                    
+                    # Hintergrundfarbe je nach Schichttyp
+                    if shift_type == 'T':
+                        c.setFillColorRGB(0.99, 0.95, 0.78)  # Gelb
+                    elif shift_type == 'T10':
+                        c.setFillColorRGB(0.86, 0.92, 0.99)  # Blau
+                    elif shift_type == 'N10':
+                        c.setFillColorRGB(0.88, 0.91, 1.0)  # Indigo
+                    else:
+                        c.setFillColorRGB(0.9, 0.9, 0.9)  # Grau
+                    
+                    c.rect(x, y_pos - 5, day_col_width, row_height, fill=1, stroke=0)
+                    
+                    # Text
+                    c.setFillColorRGB(0, 0, 0)
+                    c.setFont("Helvetica-Bold", 7)
+                    c.drawCentredString(x + day_col_width/2, y_pos + 5, shift_type)
+                    
+                    # Bestätigt-Marker
+                    if shift_info['confirmed']:
+                        c.setFont("Helvetica", 6)
+                        c.setFillColorRGB(0, 0.5, 0)
+                        c.drawCentredString(x + day_col_width/2, y_pos - 2, '✓')
+                
+                # Rahmen
+                c.setStrokeColorRGB(0.7, 0.7, 0.7)
+                c.setLineWidth(0.5)
+                c.rect(x, y_pos - 5, day_col_width, row_height, fill=0, stroke=1)
+            
+            y_pos -= row_height
+            
+            # Neue Seite wenn nötig
+            if y_pos < 100:
+                c.showPage()
+                y_pos = height - 100
+                
+                # Header wiederholen
+                c.setFont("Helvetica-Bold", 8)
+                for day in range(1, days_in_month + 1):
+                    x = x_start + name_col_width + (day - 1) * day_col_width
+                    c.drawCentredString(x + day_col_width/2, y_pos + 30, str(day))
+                
+                c.setFont("Helvetica", 6)
+                for day in range(1, days_in_month + 1):
+                    date_obj = datetime(next_year, next_month, day)
+                    weekday = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'][date_obj.weekday()]
+                    x = x_start + name_col_width + (day - 1) * day_col_width
+                    c.drawCentredString(x + day_col_width/2, y_pos + 20, weekday)
+        
+        # Legende
+        y_legend = 60
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(x_start, y_legend, "Legende:")
+        
+        c.setFont("Helvetica", 8)
+        c.setFillColorRGB(0.99, 0.95, 0.78)
+        c.rect(x_start + 60, y_legend - 5, 20, 12, fill=1, stroke=1)
+        c.setFillColorRGB(0, 0, 0)
+        c.drawString(x_start + 85, y_legend, "T = Tagdienst")
+        
+        c.setFillColorRGB(0.86, 0.92, 0.99)
+        c.rect(x_start + 170, y_legend - 5, 20, 12, fill=1, stroke=1)
+        c.setFillColorRGB(0, 0, 0)
+        c.drawString(x_start + 195, y_legend, "T10 = Tagdienst 10h")
+        
+        c.setFillColorRGB(0.88, 0.91, 1.0)
+        c.rect(x_start + 300, y_legend - 5, 20, 12, fill=1, stroke=1)
+        c.setFillColorRGB(0, 0, 0)
+        c.drawString(x_start + 325, y_legend, "N10 = Nachtdienst 10h")
+        
+        c.setFillColorRGB(0, 0.5, 0)
+        c.drawString(x_start + 450, y_legend, "✓ = Bestätigt")
         
         # Fußzeile
-        elements.append(Spacer(1, 20))
-        footer = Paragraph("🏥 DRK Köln - Erste-Hilfe-Station Flughafen", styles['Normal'])
-        elements.append(footer)
+        c.setFont("Helvetica", 8)
+        c.setFillColorRGB(0.5, 0.5, 0.5)
+        c.drawCentredString(width/2, 30, "🏥 DRK Köln - Erste-Hilfe-Station Flughafen")
         
-        doc.build(elements)
+        c.save()
         buffer.seek(0)
         
         return send_file(
             buffer,
             mimetype='application/pdf',
             as_attachment=True,
-            download_name=f'Dienstwünsche_{datetime.now().strftime("%Y%m%d")}.pdf'
+            download_name=f'Dienstplan_{month_name}_{next_year}.pdf'
         )
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/shift-requests', methods=['GET'])
 def get_shift_requests():
-    """Hole alle Dienstwünsche des Benutzers für den aktuellen Monat"""
+    """Hole alle Dienstwünsche des Benutzers für den Folgemonat"""
     auth_error = require_login()
     if auth_error:
         return auth_error
     
     try:
         user = get_current_user()
-        current_month = datetime.now().month
-        current_year = datetime.now().year
+        # Berechne Folgemonat
+        today = datetime.now()
+        if today.month == 12:
+            next_month = 1
+            next_year = today.year + 1
+        else:
+            next_month = today.month + 1
+            next_year = today.year
         
-        # Filtere nach Benutzer und aktuellem Monat
+        # Filtere nach Benutzer und Folgemonat
         requests = ShiftRequest.query.filter_by(user_id=user.id).filter(
-            db.extract('month', ShiftRequest.date) == current_month,
-            db.extract('year', ShiftRequest.date) == current_year
+            db.extract('month', ShiftRequest.date) == next_month,
+            db.extract('year', ShiftRequest.date) == next_year
         ).order_by(ShiftRequest.date).all()
         
         filtered = []
