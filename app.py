@@ -1087,17 +1087,23 @@ def create_shift_request():
                 'error': 'Das Datum darf nicht in der Vergangenheit liegen'
             }), 400
         
-        # PrÃ¼fe ob bereits ein Wunsch fÃ¼r diesen Tag und Benutzer existiert
+        # Prüfe ob bereits ein bestätigter Wunsch für diesen Tag und Benutzer existiert
         existing = ShiftRequest.query.filter_by(
             user_id=user.id,
             date=request_date.date()
         ).first()
-        
-        if existing:
+
+        if existing and existing.confirmed:
             return jsonify({
                 'success': False,
-                'error': 'Sie haben bereits einen Wunsch fÃ¼r dieses Datum eingereicht'
+                'error': 'Sie haben bereits einen bestätigten Wunsch für dieses Datum. Bitte kontaktieren Sie Herrn Peters für Änderungen.'
             }), 400
+        
+        # Wenn ein unbestätigter Wunsch existiert, lösche ihn zuerst (Update-Logik)
+        if existing and not existing.confirmed:
+            db.session.delete(existing)
+            db.session.flush()  # Flush but don't commit yet
+
         
         # Erstelle neuen Wunsch
         new_request = ShiftRequest(
@@ -1148,6 +1154,38 @@ def create_shift_request():
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+
+
+@app.route('/api/shift-requests/<request_id>', methods=['DELETE'])
+def delete_shift_request(request_id):
+    """Lösche einen Dienstwunsch"""
+    auth_error = require_login()
+    if auth_error:
+        return auth_error
+    
+    try:
+        user = get_current_user()
+        
+        # Finde den Wunsch
+        shift_request = ShiftRequest.query.get(int(request_id))
+        
+        if not shift_request:
+            return jsonify({'success': False, 'error': 'Wunsch nicht gefunden'}), 404
+        
+        # Prüfe ob der Wunsch dem aktuellen Benutzer gehört
+        if shift_request.user_id != user.id:
+            return jsonify({'success': False, 'error': 'Nicht autorisiert'}), 403
+        
+        # Lösche den Wunsch
+        db.session.delete(shift_request)
+        db.session.commit()
+        
+        return jsonify({'success': True})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/shift-requests/batch', methods=['POST'])
 def save_shifts_batch():
