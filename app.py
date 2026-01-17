@@ -353,12 +353,14 @@ def admin_dashboard():
     all_users = User.query.order_by(User.name).all()
     users_data = []
     for u in all_users:
+        # Zähle shift_requests ohne sie komplett zu laden
+        shift_count = ShiftRequest.query.filter_by(user_id=u.id).count()
         users_data.append({
             'id': u.id,
             'name': u.name,
             'is_admin': u.is_admin,
             'created_at': u.created_at.isoformat(),
-            'shift_count': len(u.shift_requests)
+            'shift_count': shift_count
         })
     
     # Lade Dienstwünsche für ausgewählten Monat
@@ -1032,6 +1034,16 @@ def get_shift_requests():
         
         filtered = []
         for req in requests:
+            # Lade Notizen für diesen Dienst
+            notes_data = []
+            for note in req.shift_notes:
+                notes_data.append({
+                    'id': note.id,
+                    'content': note.content,
+                    'user_name': note.user.name,
+                    'created_at': note.created_at.isoformat()
+                })
+            
             filtered.append({
                 'id': str(req.id),
                 'user_name': user.name,
@@ -1040,7 +1052,9 @@ def get_shift_requests():
                 'remarks': req.remarks,
                 'status': req.status,
                 'confirmed': req.confirmed,
-                'createdAt': req.created_at.isoformat()
+                'createdAt': req.created_at.isoformat(),
+                'updatedAt': req.updated_at.isoformat() if req.updated_at else req.created_at.isoformat(),
+                'notes': notes_data
             })
         
         return jsonify({'success': True, 'data': filtered})
