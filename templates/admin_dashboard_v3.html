@@ -840,11 +840,11 @@
                     sortedDates.forEach(date => {
                         const original = snapshots.find(s => s.date === date);
                         const changed = current.find(c => c.date === date);
-                        const hasChange = original && changed && original.shift_type !== changed.shift_type;
+                        const hasChange = (original && changed && original.shift_type !== changed.shift_type) || (!original && changed);
                         
                         html += `<tr style="background: ${hasChange ? '#fef3c7' : 'white'};">`;
                         html += `<td style="border: 1px solid #ddd; padding: 8px;">${new Date(date + 'T12:00:00').toLocaleDateString('de-DE')}</td>`;
-                        html += `<td style="border: 1px solid #ddd; padding: 8px; font-weight: ${hasChange ? 'bold' : 'normal'};">${original ? original.shift_type : '-'}</td>`;
+                        html += `<td style="border: 1px solid #ddd; padding: 8px; font-weight: ${hasChange ? 'bold' : 'normal'};">${original ? original.shift_type : ' NEU'}</td>`;
                         html += `<td style="border: 1px solid #ddd; padding: 8px; font-weight: ${hasChange ? 'bold' : 'normal'};">${changed ? changed.shift_type : '-'}</td>`;
                         html += `<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${hasChange ? '⚠️ GEÄNDERT' : '✓'}</td>`;
                         html += `</tr>`;
